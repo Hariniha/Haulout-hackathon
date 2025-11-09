@@ -23,27 +23,29 @@ export function WalletConnect() {
 
   if (!account) {
     return (
-      <div className="wallet-connect-wrapper">
+      <>
         <ConnectButton
           connectText="Connect Wallet"
-          className="px-6 py-2.5 bg-[#D97706] text-white font-medium rounded-lg hover:bg-[#B45309] hover:shadow-lg hover:shadow-[#D97706]/25 transition-all"
+          style={{
+            backgroundColor: '#D97706',
+            color: 'white',
+            padding: '0.625rem 1.5rem',
+            fontWeight: 500,
+            borderRadius: '0.5rem',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.3s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#B45309';
+            e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(217, 119, 6, 0.25)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = '#D97706';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
         />
-        <style jsx global>{`
-          .wallet-connect-wrapper button {
-            background-color: #D97706 !important;
-            color: white !important;
-            padding: 0.625rem 1.5rem !important;
-            font-weight: 500 !important;
-            border-radius: 0.5rem !important;
-            transition: all 0.3s !important;
-            border: none !important;
-          }
-          .wallet-connect-wrapper button:hover {
-            background-color: #B45309 !important;
-            box-shadow: 0 10px 15px -3px rgba(217, 119, 6, 0.25) !important;
-          }
-        `}</style>
-      </div>
+      </>
     );
   }
 
