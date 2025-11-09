@@ -7,7 +7,7 @@ import { Button } from '../ui/Button';
 interface ListingCardProps {
   id: string;
   name: string;
-  creator: string;
+  creator?: string;
   description: string;
   tags: string[];
   rating: number;
@@ -63,7 +63,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         
         {/* Creator */}
         <p className="text-sm text-[#525252] mb-4">
-          by @{creator}
+          by {creator ? `@${creator.slice(0, 6)}...${creator.slice(-4)}` : 'Anonymous'}
         </p>
         
         {/* Description */}

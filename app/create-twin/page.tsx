@@ -1,49 +1,156 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navigation } from '@/components/layout/Navigation';
 import { Footer } from '@/components/layout/Footer';
 import { CreateNewCard } from '@/components/ai-twin/CreateNewCard';
 import { TwinCard } from '@/components/ai-twin/TwinCard';
 import { CreateTwinModal } from '@/components/ai-twin/CreateTwinModal';
-import { Users } from 'lucide-react';
+import { PricingModal } from '@/components/marketplace/PricingModal';
+import { Modal } from '@/components/ui/Modal';
+import { Button } from '@/components/ui/Button';
+import { Users, Wallet, AlertCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useCurrentAccount } from '@mysten/dapp-kit';
+
+interface AITwin {
+  id: string;
+  name: string;
+  avatar: string;
+  createdAt: string;
+  filesCount: number;
+  conversationsCount: number;
+  nftId?: string;
+  blobId?: string;
+  encryptionKey?: string;
+  personality?: string;
+  character?: string;
+  tone?: string;
+  bio?: string;
+  isListed?: boolean;
+  price?: number;
+  creator?: string; // Wallet address of the creator
+}
 
 export default function CreateTwinPage() {
   const router = useRouter();
+  const account = useCurrentAccount();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [twins, setTwins] = useState([
-    {
-      id: '1',
-      name: 'Professional Me',
-      avatar: 'P',
-      createdAt: 'Created 2 days ago',
-      filesCount: 12,
-      conversationsCount: 47
-    },
-    {
-      id: '2',
-      name: 'Creative Twin',
-      avatar: 'C',
-      createdAt: 'Created 1 week ago',
-      filesCount: 8,
-      conversationsCount: 23
-    }
-  ]);
+  const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
+  const [isWalletWarningOpen, setIsWalletWarningOpen] = useState(false);
+  const [selectedTwin, setSelectedTwin] = useState<AITwin | null>(null);
+  const [twins, setTwins] = useState<AITwin[]>([]);
+  const [mounted, setMounted] = useState(false);
   
-  const handleCreateTwin = (data: { twinName: string; character: string; files?: File[] }) => {
-    // In real app, this would call API
-    const newTwin = {
-      id: String(twins.length + 1),
-      name: data.twinName,
-      avatar: data.twinName.charAt(0),
-      createdAt: 'Created just now',
+  // Load twins from localStorage on mount
+  useEffect(() => {
+    setMounted(true);
+    const savedTwins = localStorage.getItem('aiTwins');
+    if (savedTwins) {
+      try {
+        setTwins(JSON.parse(savedTwins));
+      } catch (error) {
+        console.error('Failed to parse saved twins:', error);
+        setTwins([]);
+      }
+    }
+  }, []);
+  
+  // Save twins to localStorage whenever they change
+  useEffect(() => {
+    if (mounted && twins.length > 0) {
+      localStorage.setItem('aiTwins', JSON.stringify(twins));
+    }
+  }, [twins, mounted]);
+  
+  const handleCreateTwin = (data: any) => {
+    console.log('Creating twin with data:', data); // Debug log
+    
+    const twinDisplayName = data.twinName || data.name || 'My AI Twin';
+    
+    const newTwin: AITwin = {
+      id: data.nftId || `twin_${Date.now()}`,
+      name: twinDisplayName,
+      avatar: twinDisplayName.charAt(0).toUpperCase(),
+      createdAt: new Date().toISOString(),
       filesCount: data.files?.length || 0,
-      conversationsCount: 0
+      conversationsCount: 0,
+      nftId: data.nftId,
+      blobId: data.blobId,
+      encryptionKey: data.encryptionKey,
+      personality: data.personality,
+      character: data.character,
+      tone: data.tone,
+      bio: data.bio,
     };
-    setTwins([...twins, newTwin]);
+    
+    console.log('New twin created:', newTwin); // Debug log
+    
+    const updatedTwins = [...twins, newTwin];
+    setTwins(updatedTwins);
+    localStorage.setItem('aiTwins', JSON.stringify(updatedTwins)); // Ensure it's saved
     setIsModalOpen(false);
   };
+  
+  const handleDeleteTwin = (twinId: string) => {
+    const updatedTwins = twins.filter(t => t.id !== twinId);
+    setTwins(updatedTwins);
+    localStorage.setItem('aiTwins', JSON.stringify(updatedTwins));
+  };
+
+  const handleCreateClick = () => {
+    console.log('Create button clicked, account:', account);
+    if (!account) {
+      console.log('No wallet connected, showing warning');
+      setIsWalletWarningOpen(true);
+      return;
+    }
+    console.log('Wallet connected, opening create modal');
+    setIsModalOpen(true);
+  };
+
+  const handleListMarketplace = (twin: AITwin) => {
+    setSelectedTwin(twin);
+    setIsPricingModalOpen(true);
+  };
+
+  const handleSetPrice = (price: number, isPublic: boolean) => {
+    if (!selectedTwin || !account) return;
+
+    const updatedTwins = twins.map(t =>
+      t.id === selectedTwin.id
+        ? { ...t, isListed: isPublic, price, creator: account.address }
+        : t
+    );
+    
+    setTwins(updatedTwins);
+    localStorage.setItem('aiTwins', JSON.stringify(updatedTwins));
+    
+    // Also save to marketplace listings with creator address
+    const marketplaceListings = JSON.parse(localStorage.getItem('marketplaceListings') || '[]');
+    const newListing = {
+      ...selectedTwin,
+      price,
+      isPublic,
+      creator: account.address, // Store creator's wallet address for payments
+      listedAt: new Date().toISOString(),
+    };
+    
+    // Check if already listed, update or add
+    const existingIndex = marketplaceListings.findIndex((l: any) => l.id === selectedTwin.id);
+    if (existingIndex >= 0) {
+      marketplaceListings[existingIndex] = newListing;
+    } else {
+      marketplaceListings.push(newListing);
+    }
+    
+    localStorage.setItem('marketplaceListings', JSON.stringify(marketplaceListings));
+    setIsPricingModalOpen(false);
+  };
+  
+  if (!mounted) {
+    return null; // Prevent hydration mismatch
+  }
   
   return (
     <div className="min-h-screen bg-[#0A0A0A]">
@@ -67,13 +174,13 @@ export default function CreateTwinPage() {
               <div className="flex items-center gap-2 mb-2">
                 <Users className="w-4 h-4 text-[#A3A3A3]" />
                 <span className="text-sm font-medium text-[#A3A3A3]">
-                  {twins.length}/3 Free Twins Created
+                  {twins.length} AI Twins Created
                 </span>
               </div>
               <div className="w-48 h-2 bg-[#262626] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-[#D97706] to-[#DC2626] transition-all duration-300"
-                  style={{ width: `${(twins.length / 3) * 100}%` }}
+                  style={{ width: `${Math.min((twins.length / 10) * 100, 100)}%` }}
                 />
               </div>
             </div>
@@ -82,16 +189,27 @@ export default function CreateTwinPage() {
           {/* Twins Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* Create New Card */}
-            <CreateNewCard onClick={() => setIsModalOpen(true)} />
+            <CreateNewCard onClick={handleCreateClick} />
             
             {/* Existing Twins */}
             {twins.map((twin) => (
               <TwinCard
                 key={twin.id}
-                {...twin}
-                onChat={() => router.push(`/chat/${twin.id}`)}
+                id={twin.id}
+                name={twin.name}
+                avatar={twin.avatar}
+                createdAt={`Created ${new Date(twin.createdAt).toLocaleDateString()}`}
+                filesCount={twin.filesCount}
+                conversationsCount={twin.conversationsCount}
+                isListed={twin.isListed}
+                onChat={() => {
+                  // Store current twin data for chat
+                  localStorage.setItem('currentTwin', JSON.stringify(twin));
+                  router.push(`/chat/${twin.id}`);
+                }}
                 onEdit={() => {}}
-                onDelete={() => setTwins(twins.filter(t => t.id !== twin.id))}
+                onDelete={() => handleDeleteTwin(twin.id)}
+                onListMarketplace={() => handleListMarketplace(twin)}
               />
             ))}
           </div>
@@ -106,6 +224,82 @@ export default function CreateTwinPage() {
         onClose={() => setIsModalOpen(false)}
         onComplete={handleCreateTwin}
       />
+      
+      {/* Pricing Modal */}
+      {selectedTwin && (
+        <PricingModal
+          isOpen={isPricingModalOpen}
+          onClose={() => setIsPricingModalOpen(false)}
+          twinName={selectedTwin.name}
+          twinId={selectedTwin.id}
+          onSetPrice={handleSetPrice}
+        />
+      )}
+      
+      {/* Wallet Warning Modal */}
+      <Modal
+        isOpen={isWalletWarningOpen}
+        onClose={() => setIsWalletWarningOpen(false)}
+        title="Connect Wallet Required"
+      >
+        <div className="p-6 space-y-6">
+          <div className="flex items-start gap-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <AlertCircle className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
+            <div className="space-y-1">
+              <h4 className="font-medium text-white">Wallet Connection Required</h4>
+              <p className="text-sm text-[#A3A3A3]">
+                You need to connect your Sui wallet to create an AI Twin. This is required to mint your twin as an NFT on the blockchain.
+              </p>
+            </div>
+          </div>
+          
+          <div className="space-y-3">
+            <h5 className="text-sm font-medium text-white">Why connect a wallet?</h5>
+            <ul className="space-y-2 text-sm text-[#A3A3A3]">
+              <li className="flex items-start gap-2">
+                <span className="text-amber-500 mt-0.5">•</span>
+                <span>Your AI Twin is minted as a unique NFT on the Sui blockchain</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-amber-500 mt-0.5">•</span>
+                <span>You own and control your digital twin permanently</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-amber-500 mt-0.5">•</span>
+                <span>Enable marketplace features and monetization</span>
+              </li>
+            </ul>
+          </div>
+          
+          <div className="flex items-center gap-3 pt-4">
+            <Button
+              onClick={() => setIsWalletWarningOpen(false)}
+              className="flex-1 bg-[#1E1E1E] hover:bg-[#262626] text-white border border-[#262626]"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setIsWalletWarningOpen(false);
+                // Scroll to top where wallet button is and give visual cue
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                // Highlight the wallet button area
+                setTimeout(() => {
+                  const walletButton = document.querySelector('[class*="ConnectButton"]') as HTMLElement;
+                  if (walletButton) {
+                    walletButton.style.animation = 'pulse 2s ease-in-out 3';
+                    walletButton.click();
+                  }
+                }, 300);
+              }}
+              className="flex-1 bg-gradient-to-r from-[#D97706] to-[#DC2626] hover:opacity-90 text-white"
+            >
+              <Wallet className="w-4 h-4 mr-2" />
+              Connect Wallet
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

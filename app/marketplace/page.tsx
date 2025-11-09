@@ -1,89 +1,110 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navigation } from '@/components/layout/Navigation';
 import { Footer } from '@/components/layout/Footer';
 import { ListingCard } from '@/components/marketplace/ListingCard';
+import { BuyAccessModal } from '@/components/marketplace/BuyAccessModal';
 import { Search, Users, Store, TrendingUp } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+
+interface MarketplaceListing {
+  id: string;
+  name: string;
+  creator?: string;
+  description?: string;
+  bio?: string;
+  tags?: string[];
+  character?: string;
+  tone?: string;
+  rating?: number;
+  users?: number;
+  messages?: number;
+  price: number;
+  featured?: boolean;
+  isPublic?: boolean;
+  listedAt?: string;
+}
 
 export default function MarketplacePage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState('popular');
+  const [userListings, setUserListings] = useState<MarketplaceListing[]>([]);
+  const [mounted, setMounted] = useState(false);
+  const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
+  const [selectedListing, setSelectedListing] = useState<any>(null);
+  const [purchaseSuccess, setPurchaseSuccess] = useState(false);
   
+  // Load user listings from localStorage
+  useEffect(() => {
+    setMounted(true);
+    const savedListings = localStorage.getItem('marketplaceListings');
+    if (savedListings) {
+      try {
+        const parsed = JSON.parse(savedListings);
+        setUserListings(parsed.filter((l: MarketplaceListing) => l.isPublic !== false));
+      } catch (error) {
+        console.error('Failed to parse marketplace listings:', error);
+      }
+    }
+  }, []);
+
   const categories = ['Professional', 'Creative', 'Personal Growth', 'Entertainment', 'Research'];
   
-  const listings = [
-    {
-      id: '1',
-      name: 'Steve Jobs AI Twin',
-      creator: 'apple_legacy',
-      description: 'Experience conversations with one of tech\'s greatest visionaries. Learn about innovation, design thinking, and building world-changing products.',
-      tags: ['Professional', 'Innovation', 'Leadership'],
-      rating: 4.9,
-      users: 1243,
-      messages: 15678,
-      price: 500,
-      featured: true
-    },
-    {
-      id: '2',
-      name: 'Marie Curie Twin',
-      creator: 'science_history',
-      description: 'Chat with the pioneering physicist and chemist. Discuss scientific discovery, perseverance, and breaking barriers in male-dominated fields.',
-      tags: ['Research', 'Science', 'History'],
-      rating: 4.8,
-      users: 892,
-      messages: 9234,
-      price: 450,
-      featured: true
-    },
-    {
-      id: '3',
-      name: 'Marketing Guru AI',
-      creator: 'digital_expert',
-      description: 'Get expert marketing advice from an AI trained on 20 years of successful campaigns. Perfect for entrepreneurs and marketers.',
-      tags: ['Professional', 'Marketing', 'Business'],
-      rating: 4.7,
-      users: 2156,
-      messages: 23456,
-      price: 350
-    },
-    {
-      id: '4',
-      name: 'Creative Writer Twin',
-      creator: 'wordsmith_pro',
-      description: 'Collaborate with an AI trained on award-winning literature. Get help with character development, plot structure, and creative inspiration.',
-      tags: ['Creative', 'Writing', 'Art'],
-      rating: 4.6,
-      users: 1567,
-      messages: 18903,
-      price: 300
-    },
-    {
-      id: '5',
-      name: 'Meditation Master',
-      creator: 'mindful_soul',
-      description: 'Find inner peace with an AI trained on ancient wisdom and modern mindfulness practices. Perfect for stress relief and personal growth.',
-      tags: ['Personal Growth', 'Wellness', 'Meditation'],
-      rating: 4.9,
-      users: 3421,
-      messages: 34567,
-      price: 250
-    },
-    {
-      id: '6',
-      name: 'Startup Founder AI',
-      creator: 'entrepreneur_hub',
-      description: 'Get advice from an AI trained on successful startup journeys. Learn about fundraising, product-market fit, and scaling your business.',
-      tags: ['Professional', 'Startup', 'Business'],
-      rating: 4.5,
-      users: 987,
-      messages: 12345,
-      price: 400
+  // Only show user-created listings (no mock data)
+  const allListings = userListings.map(listing => ({
+    id: listing.id,
+    name: listing.name,
+    creator: listing.creator || undefined, // Use actual wallet address or undefined
+    description: listing.bio || listing.description || 'Your AI Digital Twin',
+    tags: listing.character && listing.tone 
+      ? [listing.character, listing.tone]
+      : ['Personal', 'Custom'],
+    rating: listing.rating || 5.0,
+    users: listing.users || 0,
+    messages: listing.messages || 0,
+    price: listing.price,
+    featured: false,
+  }));
+
+  // Filter and sort listings
+  const filteredListings = allListings.filter(listing => {
+    // Search filter
+    if (searchQuery && !listing.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !listing.description.toLowerCase().includes(searchQuery.toLowerCase())) {
+      return false;
     }
-  ];
-  
+    
+    // Category filter
+    if (selectedCategory.length > 0) {
+      const hasMatchingTag = listing.tags.some(tag => 
+        selectedCategory.some(cat => tag.toLowerCase().includes(cat.toLowerCase()))
+      );
+      if (!hasMatchingTag) return false;
+    }
+    
+    return true;
+  });
+
+  // Sort listings
+  const sortedListings = [...filteredListings].sort((a, b) => {
+    switch (sortBy) {
+      case 'newest':
+        return b.id.localeCompare(a.id);
+      case 'price-low':
+        return a.price - b.price;
+      case 'price-high':
+        return b.price - a.price;
+      case 'rating':
+        return (b.rating || 0) - (a.rating || 0);
+      case 'popular':
+      default:
+        return (b.users || 0) - (a.users || 0);
+    }
+  });
+
   const handleCategoryToggle = (category: string) => {
     if (selectedCategory.includes(category)) {
       setSelectedCategory(selectedCategory.filter(c => c !== category));
@@ -91,6 +112,27 @@ export default function MarketplacePage() {
       setSelectedCategory([...selectedCategory, category]);
     }
   };
+
+  const handleBuyClick = (listing: any) => {
+    setSelectedListing(listing);
+    setIsBuyModalOpen(true);
+  };
+
+  const handlePurchaseSuccess = () => {
+    setPurchaseSuccess(true);
+    // Reload the page or refresh listings
+    setTimeout(() => {
+      setPurchaseSuccess(false);
+      // Optionally redirect to chat with the purchased twin
+      if (selectedListing) {
+        router.push(`/chat/${selectedListing.id}`);
+      }
+    }, 2000);
+  };
+
+  if (!mounted) {
+    return null; // Prevent hydration mismatch
+  }
   
   return (
     <div className="min-h-screen bg-[#0A0A0A]">
@@ -125,7 +167,7 @@ export default function MarketplacePage() {
             <div className="flex gap-8 justify-center mt-8 text-sm text-[#A3A3A3]">
               <div className="flex items-center gap-2">
                 <Store className="w-4 h-4" />
-                <span>{listings.length} AI Twins</span>
+                <span>{allListings.length} AI Twins</span>
               </div>
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4" />
@@ -196,22 +238,61 @@ export default function MarketplacePage() {
             
             {/* Listings Grid */}
             <div className="flex-1">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {listings.map((listing) => (
-                  <ListingCard
-                    key={listing.id}
-                    {...listing}
-                    onPreview={() => console.log('Preview', listing.id)}
-                    onBuy={() => console.log('Buy', listing.id)}
-                  />
-                ))}
-              </div>
+              {sortedListings.length === 0 ? (
+                <div className="text-center py-16">
+                  <Store className="w-16 h-16 text-[#525252] mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold text-[#F5F5F5] mb-2">
+                    No AI Twins Found
+                  </h3>
+                  <p className="text-[#A3A3A3] mb-6">
+                    {searchQuery || selectedCategory.length > 0
+                      ? 'Try adjusting your filters or search query'
+                      : 'Create your first AI twin and list it on the marketplace!'}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {sortedListings.map((listing) => (
+                    <ListingCard
+                      key={listing.id}
+                      {...listing}
+                      onPreview={() => console.log('Preview', listing.id)}
+                      onBuy={() => handleBuyClick(listing)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
       </main>
       
       <Footer />
+
+      {/* Buy Access Modal */}
+      {selectedListing && (
+        <BuyAccessModal
+          isOpen={isBuyModalOpen}
+          onClose={() => setIsBuyModalOpen(false)}
+          listing={selectedListing}
+          onSuccess={handlePurchaseSuccess}
+        />
+      )}
+
+      {/* Success Message */}
+      {purchaseSuccess && (
+        <div className="fixed top-24 right-8 bg-[#059669] text-white px-6 py-4 rounded-lg shadow-lg z-50 animate-slide-in">
+          <div className="flex items-center gap-3">
+            <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center">
+              <span className="text-[#059669] text-lg">✓</span>
+            </div>
+            <div>
+              <p className="font-semibold">Purchase Successful!</p>
+              <p className="text-sm opacity-90">Redirecting to chat...</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

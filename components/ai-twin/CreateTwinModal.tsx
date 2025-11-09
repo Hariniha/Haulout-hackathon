@@ -4,7 +4,12 @@ import React, { useState } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input, Textarea } from '../ui/Input';
-import { ArrowRight, ArrowLeft, Upload, X, CheckCircle, Sparkles, FileText, Image as ImageIcon } from 'lucide-react';
+import { ArrowRight, ArrowLeft, Upload, X, CheckCircle, Sparkles, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { storeOnWalrus } from '@/lib/walrus';
+import { generateTwinPersonality } from '@/lib/groq';
+import { encryptDataWithNewKey } from '@/lib/encryption';
+import Tesseract from 'tesseract.js';
 
 interface CreateTwinModalProps {
   isOpen: boolean;
@@ -40,6 +45,11 @@ export const CreateTwinModal: React.FC<CreateTwinModalProps> = ({
     tone: 'Friendly'
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingStep, setProcessingStep] = useState('');
+  
+  const account = useCurrentAccount();
+  const { mutateAsync: signAndExecute } = useSignAndExecuteTransaction();
   
   const handleNext = () => {
     // Validate current step
@@ -85,19 +95,148 @@ export const CreateTwinModal: React.FC<CreateTwinModalProps> = ({
     setFormData({ ...formData, files: newFiles });
   };
   
-  const handleComplete = () => {
-    onComplete(formData);
-    // Reset form
-    setFormData({
-      name: '',
-      dateOfBirth: '',
-      bio: '',
-      files: [],
-      character: 'geometric',
-      twinName: 'My Digital Twin',
-      tone: 'Friendly'
-    });
-    setStep(1);
+  const handleComplete = async () => {
+    if (!account) {
+      setErrors({ wallet: 'Please connect your wallet first' });
+      return;
+    }
+
+    setIsProcessing(true);
+    
+    try {
+      // Step 1: Extract text from images using Tesseract OCR
+      setProcessingStep('Extracting text from images with Tesseract OCR...');
+      let extractedText = formData.bio || '';
+      
+      const imageFiles = formData.files.filter(file => file.type.startsWith('image/'));
+      for (const imageFile of imageFiles) {
+        try {
+          const { data: { text } } = await Tesseract.recognize(imageFile, 'eng', {
+            logger: (m) => {
+              if (m.status === 'recognizing text') {
+                setProcessingStep(`OCR: Processing ${imageFile.name} - ${Math.round(m.progress * 100)}%`);
+              }
+            }
+          });
+          extractedText += `\n\n--- From ${imageFile.name} ---\n${text}`;
+        } catch (ocrError) {
+          console.error(`OCR failed for ${imageFile.name}:`, ocrError);
+        }
+      }
+      
+      // Step 2: Generate AI personality from extracted data
+      setProcessingStep('Generating AI twin personality...');
+      const personalityData = await generateTwinPersonality(
+        extractedText,
+        formData.name
+      );
+      
+      // Step 3: Encrypt the training data with SEAL Protocol
+      setProcessingStep('Encrypting data with SEAL Protocol (AES-256-GCM)...');
+      const trainingData = JSON.stringify({
+        name: formData.name,
+        dateOfBirth: formData.dateOfBirth,
+        bio: formData.bio,
+        extractedText,
+        personality: personalityData,
+        character: formData.character,
+        twinName: formData.twinName,
+        tone: formData.tone,
+        createdAt: new Date().toISOString()
+      });
+      
+      const { encrypted, iv, key: encryptionKey } = await encryptDataWithNewKey(trainingData);
+      
+      // Step 4: Store encrypted data on Walrus
+      setProcessingStep('Uploading encrypted data to Walrus decentralized storage...');
+      const encryptedBlob = new Blob([encrypted], { type: 'application/octet-stream' });
+      const walrusResult = await storeOnWalrus(encryptedBlob);
+      
+      if (!walrusResult.blobId) {
+        throw new Error('Failed to upload to Walrus');
+      }
+      
+      // Step 5: Mint NFT on Sui blockchain
+      setProcessingStep('Minting AI Twin NFT on Sui blockchain...');
+      
+      // Import contract functions dynamically to avoid circular deps
+      const { Transaction } = await import('@mysten/sui/transactions');
+      const { CONTRACT_CONFIG } = await import('@/lib/sui/contract');
+      
+      // Generate unique twin_id using timestamp + wallet address
+      const uniqueTwinId = `twin_${Date.now()}_${account.address.slice(-8)}`;
+      
+      // Prepare metadata JSON
+      const metadata = JSON.stringify({
+        character: formData.character,
+        tone: formData.tone,
+        dateOfBirth: formData.dateOfBirth,
+      });
+      
+      const tx = new Transaction();
+      
+      // Call the mint_ai_twin function with correct argument order:
+      // 1. registry (shared object)
+      // 2. twin_id (unique identifier)
+      // 3. name (twin name)
+      // 4. description (bio/description)
+      // 5. training_data_blob_id (Walrus blob ID)
+      // 6. metadata (JSON string with extra info)
+      tx.moveCall({
+        target: `${CONTRACT_CONFIG.PACKAGE_ID}::ai_twin_nft::mint_ai_twin`,
+        arguments: [
+          tx.object(CONTRACT_CONFIG.AI_TWIN_REGISTRY),
+          tx.pure.string(uniqueTwinId), // Unique twin_id
+          tx.pure.string(formData.twinName), // Twin name
+          tx.pure.string(formData.bio || 'AI Digital Twin'), // Description
+          tx.pure.string(walrusResult.blobId), // Walrus blob_id
+          tx.pure.string(metadata), // Metadata JSON
+        ],
+      });
+      
+      setProcessingStep('Waiting for transaction confirmation...');
+      const result = await signAndExecute({
+        transaction: tx,
+      });
+      
+      if (!result || !result.digest) {
+        throw new Error('Transaction failed');
+      }
+      
+      setProcessingStep('Success! AI Twin created.');
+      
+      // Complete with all the data including unique twin_id
+      onComplete({
+        ...formData,
+        id: uniqueTwinId, // Save the unique twin_id
+        nftId: result.digest,
+        blobId: walrusResult.blobId,
+        encryptionKey,
+        personality: personalityData
+      } as any);
+      
+      // Reset form
+      setFormData({
+        name: '',
+        dateOfBirth: '',
+        bio: '',
+        files: [],
+        character: 'geometric',
+        twinName: 'My Digital Twin',
+        tone: 'Friendly'
+      });
+      setStep(1);
+      setIsProcessing(false);
+      setProcessingStep('');
+      
+    } catch (error: any) {
+      console.error('AI Twin creation failed:', error);
+      setErrors({ 
+        processing: error.message || 'Failed to create AI Twin. Please try again.' 
+      });
+      setIsProcessing(false);
+      setProcessingStep('');
+    }
   };
   
   const characters = [
@@ -250,11 +389,14 @@ export const CreateTwinModal: React.FC<CreateTwinModalProps> = ({
         {step === 3 && (
           <>
             <div>
-              <h3 className="text-lg font-semibold text-[#F5F5F5] mb-6">
-                Choose Your Digital Appearance
+              <h3 className="text-xl font-bold text-[#F5F5F5] mb-2">
+                Customize Your AI Twin
               </h3>
+              <p className="text-sm text-[#A3A3A3] mb-6">
+                Choose how your AI twin will look and interact
+              </p>
               
-              <div className="grid grid-cols-4 gap-4 mb-6">
+              <div className="grid grid-cols-4 gap-4 mb-8">
                 {characters.map((char) => (
                   <div
                     key={char}
@@ -290,10 +432,10 @@ export const CreateTwinModal: React.FC<CreateTwinModalProps> = ({
                   <button
                     key={tone}
                     onClick={() => setFormData({ ...formData, tone })}
-                    className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+                    className={`px-6 py-2.5 rounded-lg font-medium transition-all duration-200 ${
                       formData.tone === tone
-                        ? 'bg-[#D97706] text-white border border-[#D97706]'
-                        : 'bg-[#1E1E1E] border border-[#262626] text-[#A3A3A3] hover:border-[#404040]'
+                        ? 'bg-[#D97706] text-white border-2 border-[#D97706] shadow-lg'
+                        : 'bg-[#1E1E1E] border-2 border-[#262626] text-[#A3A3A3] hover:border-[#404040]'
                     }`}
                   >
                     {tone}
@@ -301,46 +443,106 @@ export const CreateTwinModal: React.FC<CreateTwinModalProps> = ({
                 ))}
               </div>
             </div>
+            
+            {/* Summary Card */}
+            <div className="mt-6 p-5 bg-gradient-to-br from-[#1E1E1E] to-[#141414] border-2 border-[#D97706]/30 rounded-xl">
+              <h4 className="text-sm font-semibold text-[#D97706] mb-3 flex items-center gap-2">
+                <Sparkles className="w-4 h-4" />
+                Ready to Create
+              </h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-[#737373]">Name:</span>
+                  <span className="text-[#F5F5F5] font-medium">{formData.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#737373]">Files:</span>
+                  <span className="text-[#F5F5F5] font-medium">{formData.files.length} uploaded</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#737373]">Twin Name:</span>
+                  <span className="text-[#F5F5F5] font-medium">{formData.twinName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#737373]">Style:</span>
+                  <span className="text-[#F5F5F5] font-medium capitalize">{formData.character} · {formData.tone}</span>
+                </div>
+              </div>
+            </div>
           </>
         )}
       </div>
       
+      {/* Processing Status */}
+      {isProcessing && (
+        <div className="mt-6 p-4 bg-[#1E1E1E] border border-[#D97706] rounded-lg">
+          <div className="flex items-center gap-3">
+            <Loader2 className="w-5 h-5 text-[#D97706] animate-spin" />
+            <div>
+              <p className="text-sm font-medium text-[#F5F5F5]">Creating Your AI Twin...</p>
+              <p className="text-xs text-[#A3A3A3] mt-1">{processingStep}</p>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Error Display */}
+      {errors.processing && (
+        <div className="mt-6 p-4 bg-[#DC2626]/10 border border-[#DC2626] rounded-lg">
+          <p className="text-sm text-[#DC2626]">{errors.processing}</p>
+        </div>
+      )}
+      
+      {errors.wallet && (
+        <div className="mt-6 p-4 bg-[#DC2626]/10 border border-[#DC2626] rounded-lg">
+          <p className="text-sm text-[#DC2626]">{errors.wallet}</p>
+        </div>
+      )}
+      
       {/* Action Buttons */}
-      <div className="flex justify-between gap-3 mt-8">
-        {step > 1 && (
-          <Button
-            variant="ghost"
-            size="medium"
-            icon={ArrowLeft}
-            iconPosition="left"
+      <div className="flex items-center justify-between gap-4 mt-8 pt-6 border-t border-[#262626]">
+        {step > 1 && !isProcessing ? (
+          <button
             onClick={handleBack}
+            className="px-6 py-3 bg-[#1E1E1E] hover:bg-[#252525] border border-[#262626] text-[#F5F5F5] rounded-lg font-medium transition-colors flex items-center gap-2"
           >
+            <ArrowLeft className="w-4 h-4" />
             Back
-          </Button>
+          </button>
+        ) : (
+          <div></div>
         )}
         
-        <div className="ml-auto">
-          {step < 3 ? (
-            <Button
-              variant="primary"
-              size="medium"
-              icon={ArrowRight}
-              onClick={handleNext}
-            >
-              Next
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              size="medium"
-              icon={Sparkles}
-              iconPosition="left"
-              onClick={handleComplete}
-            >
-              Create My AI Twin
-            </Button>
-          )}
-        </div>
+        {step < 3 ? (
+          <button
+            onClick={handleNext}
+            disabled={isProcessing}
+            className="px-8 py-3 bg-[#D97706] hover:bg-[#B45309] text-white rounded-lg font-semibold transition-all duration-200 hover:shadow-lg hover:shadow-orange-900/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            Next
+            <ArrowRight className="w-5 h-5" />
+          </button>
+        ) : (
+          <button
+            onClick={handleComplete}
+            disabled={isProcessing}
+            className={`px-10 py-4 bg-gradient-to-r from-[#D97706] to-[#DC2626] hover:from-[#B45309] hover:to-[#B91C1C] text-white rounded-xl font-bold text-lg transition-all duration-200 hover:shadow-2xl hover:shadow-orange-900/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 ${
+              isProcessing ? 'animate-pulse' : 'hover:scale-105'
+            }`}
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="w-6 h-6 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-6 h-6" />
+                Create My AI Twin
+              </>
+            )}
+          </button>
+        )}
       </div>
     </Modal>
   );

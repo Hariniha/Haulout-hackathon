@@ -7,6 +7,8 @@ import {
   Layers, Copy, RefreshCw, User, Check 
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { twinChat } from '@/lib/groq';
+import { useRouter } from 'next/navigation';
 
 interface Message {
   id: string;
@@ -16,20 +18,81 @@ interface Message {
   seen?: boolean;
 }
 
+interface AITwin {
+  id: string;
+  name: string;
+  personality?: string;
+  character?: string;
+  tone?: string;
+  bio?: string;
+}
+
 export default function ChatPage({ params }: { params: Promise<{ twinId: string }> }) {
   const resolvedParams = use(params);
+  const router = useRouter();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isInfoSidebarOpen, setIsInfoSidebarOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [twin, setTwin] = useState<AITwin | null>(null);
+  const [allTwins, setAllTwins] = useState<AITwin[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  const twin = {
-    id: resolvedParams.twinId,
-    name: 'Professional Me',
-    status: 'Online'
-  };
+  // Load twin data from localStorage
+  useEffect(() => {
+    // Load current twin
+    const currentTwinData = localStorage.getItem('currentTwin');
+    if (currentTwinData) {
+      setTwin(JSON.parse(currentTwinData));
+    }
+    
+    // Load all twins (owned + purchased)
+    const savedTwins = localStorage.getItem('aiTwins');
+    const accessibleTwins = localStorage.getItem('accessibleTwins');
+    
+    let allAvailableTwins: AITwin[] = [];
+    
+    if (savedTwins) {
+      allAvailableTwins = [...JSON.parse(savedTwins)];
+    }
+    
+    if (accessibleTwins) {
+      const purchased = JSON.parse(accessibleTwins);
+      allAvailableTwins = [...allAvailableTwins, ...purchased];
+    }
+    
+    setAllTwins(allAvailableTwins);
+    
+    // If no current twin, find by ID
+    if (!currentTwinData && allAvailableTwins.length > 0) {
+      const foundTwin = allAvailableTwins.find((t: AITwin) => t.id === resolvedParams.twinId);
+      if (foundTwin) {
+        setTwin(foundTwin);
+      } else {
+        // Twin not found, redirect back
+        router.push('/create-twin');
+      }
+    } else if (allAvailableTwins.length === 0) {
+      // No twins found, redirect back
+      router.push('/create-twin');
+    }
+    
+    // Load chat history for this twin
+    const chatKey = `chat_${resolvedParams.twinId}`;
+    const savedChat = localStorage.getItem(chatKey);
+    if (savedChat) {
+      setMessages(JSON.parse(savedChat));
+    }
+  }, [resolvedParams.twinId, router]);
+  
+  // Save chat history whenever messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      const chatKey = `chat_${resolvedParams.twinId}`;
+      localStorage.setItem(chatKey, JSON.stringify(messages));
+    }
+  }, [messages, resolvedParams.twinId]);
   
   const suggestedQuestions = [
     'What are my core values?',
@@ -46,8 +109,8 @@ export default function ChatPage({ params }: { params: Promise<{ twinId: string 
     scrollToBottom();
   }, [messages]);
   
-  const handleSendMessage = () => {
-    if (!inputValue.trim()) return;
+  const handleSendMessage = async () => {
+    if (!inputValue.trim() || !twin) return;
     
     const newMessage: Message = {
       id: Date.now().toString(),
@@ -61,17 +124,38 @@ export default function ChatPage({ params }: { params: Promise<{ twinId: string 
     setInputValue('');
     setIsTyping(true);
     
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+      // Use actual AI twin chat with personality
+      const personality = twin.personality || `You are ${twin.name}, a friendly AI assistant with a ${twin.tone || 'casual'} conversation style.`;
+      
+      // Convert messages to conversation history
+      const conversationHistory = messages.map(msg => ({
+        role: msg.type === 'user' ? 'user' as const : 'assistant' as const,
+        content: msg.content
+      }));
+      
+      const aiResponse = await twinChat(personality, inputValue, conversationHistory);
+      
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
-        content: 'This is a simulated response from your AI twin. In production, this would be powered by the actual AI model trained on your data.',
+        content: aiResponse,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
+      
       setMessages(prev => [...prev, aiMessage]);
+    } catch (error) {
+      console.error('Chat error:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: 'Sorry, I encountered an error. Please try again.',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsTyping(false);
-    }, 2000);
+    }
   };
   
   const handleSuggestedQuestion = (question: string) => {
@@ -104,22 +188,37 @@ export default function ChatPage({ params }: { params: Promise<{ twinId: string 
           
           {/* Twins List */}
           <div className="p-2 space-y-2 flex-1 overflow-y-auto">
-            <div className="bg-[#D97706]/10 border border-[#D97706] p-3 rounded-lg cursor-pointer">
-              {isSidebarCollapsed ? (
-                <div className="w-10 h-10 bg-gradient-to-br from-[#D97706] to-[#DC2626] rounded-lg flex items-center justify-center mx-auto">
-                  <span className="text-white font-bold">P</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-[#D97706] to-[#DC2626] rounded-lg flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-bold">P</span>
+            {allTwins.map((t) => (
+              <div 
+                key={t.id}
+                onClick={() => router.push(`/chat/${t.id}`)}
+                className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                  t.id === twin?.id 
+                    ? 'bg-[#D97706]/10 border border-[#D97706]' 
+                    : 'hover:bg-[#1E1E1E] border border-transparent'
+                }`}
+              >
+                {isSidebarCollapsed ? (
+                  <div className="w-10 h-10 bg-gradient-to-br from-[#D97706] to-[#DC2626] rounded-lg flex items-center justify-center mx-auto">
+                    <span className="text-white font-bold">{t.name.charAt(0).toUpperCase()}</span>
                   </div>
-                  <span className="text-sm font-medium text-[#F5F5F5] truncate">
-                    {twin.name}
-                  </span>
-                </div>
-              )}
-            </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-[#D97706] to-[#DC2626] rounded-lg flex items-center justify-center flex-shrink-0">
+                      <span className="text-white font-bold">{t.name.charAt(0).toUpperCase()}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-[#F5F5F5] truncate block">
+                        {t.name}
+                      </span>
+                      {t.tone && (
+                        <span className="text-xs text-[#737373] capitalize">{t.tone}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
           
           {/* Bottom Actions */}
@@ -142,13 +241,13 @@ export default function ChatPage({ params }: { params: Promise<{ twinId: string 
           <div className="p-4 border-b border-[#262626] bg-[#0A0A0A]/95 backdrop-blur flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-br from-[#D97706] to-[#DC2626] rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold">P</span>
+                <span className="text-white font-bold">{twin?.name.charAt(0).toUpperCase() || 'A'}</span>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-[#F5F5F5]">{twin.name}</h3>
+                <h3 className="text-lg font-semibold text-[#F5F5F5]">{twin?.name || 'AI Twin'}</h3>
                 <p className="text-xs text-[#059669] flex items-center gap-1">
                   <span className="w-2 h-2 bg-[#059669] rounded-full"></span>
-                  {twin.status} • Ready to chat
+                  Online • Ready to chat
                 </p>
               </div>
             </div>
@@ -307,10 +406,10 @@ export default function ChatPage({ params }: { params: Promise<{ twinId: string 
             <div className="space-y-6">
               <div className="flex flex-col items-center">
                 <div className="w-20 h-20 bg-gradient-to-br from-[#D97706] to-[#DC2626] rounded-xl flex items-center justify-center mb-3">
-                  <span className="text-3xl text-white font-bold">P</span>
+                  <span className="text-3xl text-white font-bold">{twin?.name.charAt(0).toUpperCase() || 'A'}</span>
                 </div>
-                <h4 className="text-xl font-semibold text-[#F5F5F5] text-center">{twin.name}</h4>
-                <p className="text-sm text-[#525252] text-center">Created 2 days ago</p>
+                <h4 className="text-xl font-semibold text-[#F5F5F5] text-center">{twin?.name || 'AI Twin'}</h4>
+                <p className="text-sm text-[#525252] text-center capitalize">{twin?.character} • {twin?.tone}</p>
               </div>
               
               <div>

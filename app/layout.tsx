@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SuiWalletProvider } from "@/lib/sui/SuiWalletProvider";
+import { GlobalErrorHandler } from "@/components/providers/GlobalErrorHandler";
+import { WalletFilterScript } from "@/components/providers/WalletFilterScript";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,6 +30,8 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <WalletFilterScript />
+        <GlobalErrorHandler />
         <SuiWalletProvider>
           {children}
         </SuiWalletProvider>

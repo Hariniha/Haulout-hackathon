@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Menu, X } from 'lucide-react';
 import { WalletConnect } from '../wallet/WalletConnect';
 import { ZkLoginButton } from '../wallet/ZkLoginButton';
@@ -23,7 +24,8 @@ export const Navigation: React.FC = () => {
     { href: '#features', label: 'Features' },
     { href: '#how-it-works', label: 'How It Works' },
     { href: '/marketplace', label: 'Marketplace' },
-    { href: '#pricing', label: 'Pricing' }
+    { href: '/my-purchases', label: 'My Purchases' },
+    { href: '/create-twin', label: 'Create Twin' }
   ];
   
   return (
@@ -35,9 +37,16 @@ export const Navigation: React.FC = () => {
       <div className="max-w-7xl mx-auto px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center">
-            <span className="text-xl font-bold text-[#F5F5F5] tracking-tight">
-              SYNTHETIC SOULS
+          <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+            <Image 
+              src="/logo.jpg" 
+              alt="NexusSoul Logo" 
+              width={48} 
+              height={48} 
+              className="rounded-lg object-cover"
+            />
+            <span className="text-xl font-bold text-[#F5F5F5] hidden sm:block">
+            
             </span>
           </Link>
           

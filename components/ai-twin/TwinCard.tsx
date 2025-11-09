@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Calendar, Database, MessageSquare, Edit, Trash, MoreVertical } from 'lucide-react';
+import { Calendar, Database, MessageSquare, Edit, Trash, MoreVertical, Store } from 'lucide-react';
 import { Button } from '../ui/Button';
 
 interface TwinCardProps {
@@ -11,9 +11,11 @@ interface TwinCardProps {
   createdAt: string;
   filesCount: number;
   conversationsCount: number;
+  isListed?: boolean;
   onChat: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onListMarketplace?: () => void;
 }
 
 export const TwinCard: React.FC<TwinCardProps> = ({
@@ -21,9 +23,11 @@ export const TwinCard: React.FC<TwinCardProps> = ({
   createdAt,
   filesCount,
   conversationsCount,
+  isListed = false,
   onChat,
   onEdit,
-  onDelete
+  onDelete,
+  onListMarketplace
 }) => {
   return (
     <div className="bg-[#1E1E1E] border border-[#262626] p-6 rounded-2xl hover:border-[#404040] hover:shadow-lg transition-all duration-300 flex flex-col min-h-[300px]">
@@ -65,6 +69,16 @@ export const TwinCard: React.FC<TwinCardProps> = ({
         </div>
       </div>
       
+      {/* Listing Badge */}
+      {isListed && (
+        <div className="mb-4">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#059669]/10 border border-[#059669]/30 rounded-full text-xs text-[#059669] font-medium">
+            <Store className="w-3 h-3" />
+            Listed on Marketplace
+          </span>
+        </div>
+      )}
+      
       {/* Actions */}
       <div className="flex gap-2 mt-auto">
         <Button 
@@ -77,6 +91,17 @@ export const TwinCard: React.FC<TwinCardProps> = ({
         >
           Chat
         </Button>
+        {!isListed && onListMarketplace && (
+          <Button 
+            variant="secondary" 
+            size="small" 
+            icon={Store}
+            onClick={onListMarketplace}
+            className="px-3"
+            title="List on Marketplace"
+          >
+          </Button>
+        )}
         <Button 
           variant="ghost" 
           size="small" 

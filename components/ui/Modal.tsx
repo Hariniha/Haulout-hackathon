@@ -57,15 +57,15 @@ export const Modal: React.FC<ModalProps> = ({
   
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className={`w-full ${maxWidthStyles[maxWidth]} bg-[#141414] border border-[#262626] rounded-2xl shadow-2xl animate-slide-up`}
+        className={`w-full ${maxWidthStyles[maxWidth]} bg-[#141414] border border-[#262626] rounded-2xl shadow-2xl animate-slide-up my-8 max-h-[90vh] flex flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
         {(title || showCloseButton) && (
-          <div className="flex items-center justify-between p-8 pb-4">
+          <div className="flex items-center justify-between p-8 pb-4 flex-shrink-0">
             {title && (
               <h2 className="text-3xl font-bold text-[#F5F5F5]">{title}</h2>
             )}
@@ -80,7 +80,7 @@ export const Modal: React.FC<ModalProps> = ({
             )}
           </div>
         )}
-        <div className="p-8 pt-4">
+        <div className="p-8 pt-4 overflow-y-auto flex-1">
           {children}
         </div>
       </div>

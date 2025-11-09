@@ -91,6 +91,10 @@
     }
   }
 
+  .animate-slide-in {
+    animation: slideIn 0.4s ease-out;
+  }
+
   @keyframes slideUp {
     from {
       transform: translateY(20px);
@@ -113,6 +117,17 @@
     }
   }
 
+  @keyframes slideIn {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
   /* Bounce Animation for Scroll Indicator */
   @keyframes bounce {
     0%, 100% {
@@ -125,86 +140,5 @@
 
   .animate-bounce-slow {
     animation: bounce 2s infinite;
-  }
-}
-
-/* Sui Wallet Modal Styles */
-@layer components {
-  /* Modal Backdrop */
-  [data-radix-popper-content-wrapper] {
-    z-index: 9999 !important;
-  }
-
-  /* Modal Container */
-  .sui-wallet-modal {
-    background: #141414 !important;
-    border: 1px solid #262626 !important;
-    border-radius: 16px !important;
-    padding: 24px !important;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5) !important;
-  }
-
-  /* Modal Title */
-  .sui-wallet-modal h2,
-  .sui-wallet-modal [role="heading"] {
-    color: #F5F5F5 !important;
-    font-size: 20px !important;
-    font-weight: 600 !important;
-    margin-bottom: 16px !important;
-  }
-
-  /* Wallet List */
-  .sui-wallet-list {
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 12px !important;
-  }
-
-  /* Individual Wallet Button */
-  .sui-wallet-item,
-  button[data-wallet] {
-    background: #1E1E1E !important;
-    border: 1px solid #262626 !important;
-    border-radius: 12px !important;
-    padding: 16px !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 12px !important;
-    width: 100% !important;
-    cursor: pointer !important;
-    transition: all 0.2s !important;
-  }
-
-  .sui-wallet-item:hover,
-  button[data-wallet]:hover {
-    background: #252525 !important;
-    border-color: #D97706 !important;
-    box-shadow: 0 4px 6px -1px rgba(217, 119, 6, 0.2) !important;
-  }
-
-  /* Wallet Icon */
-  .sui-wallet-icon {
-    width: 40px !important;
-    height: 40px !important;
-    border-radius: 8px !important;
-  }
-
-  /* Wallet Name */
-  .sui-wallet-name {
-    color: #F5F5F5 !important;
-    font-size: 16px !important;
-    font-weight: 500 !important;
-  }
-
-  /* Close Button */
-  .sui-wallet-close,
-  button[aria-label="Close"] {
-    color: #A3A3A3 !important;
-    transition: color 0.2s !important;
-  }
-
-  .sui-wallet-close:hover,
-  button[aria-label="Close"]:hover {
-    color: #F5F5F5 !important;
   }
 }
