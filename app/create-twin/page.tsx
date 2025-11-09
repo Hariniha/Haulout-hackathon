@@ -31,14 +31,14 @@ export default function CreateTwinPage() {
     }
   ]);
   
-  const handleCreateTwin = (data: any) => {
+  const handleCreateTwin = (data: { twinName: string; character: string; files?: File[] }) => {
     // In real app, this would call API
     const newTwin = {
       id: String(twins.length + 1),
       name: data.twinName,
       avatar: data.twinName.charAt(0),
       createdAt: 'Created just now',
-      filesCount: data.files.length,
+      filesCount: data.files?.length || 0,
       conversationsCount: 0
     };
     setTwins([...twins, newTwin]);

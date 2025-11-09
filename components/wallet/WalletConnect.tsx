@@ -3,7 +3,6 @@
 import { ConnectButton, useCurrentAccount, useDisconnectWallet } from '@mysten/dapp-kit';
 import { Wallet, LogOut, Copy, Check } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '@/components/ui/Button';
 
 export function WalletConnect() {
   const account = useCurrentAccount();

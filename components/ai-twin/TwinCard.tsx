@@ -18,7 +18,6 @@ interface TwinCardProps {
 
 export const TwinCard: React.FC<TwinCardProps> = ({
   name,
-  avatar,
   createdAt,
   filesCount,
   conversationsCount,

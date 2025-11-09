@@ -7,7 +7,7 @@ import { Mail, Loader2 } from 'lucide-react';
 export function ZkLoginButton() {
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleZkLogin = async () => {
+  const handleZkLogin = () => {
     setIsLoading(true);
     try {
       // zkLogin OAuth flow
@@ -26,7 +26,8 @@ export function ZkLoginButton() {
         `scope=openid email profile&` +
         `nonce=${nonce}`;
       
-      window.location.href = authUrl;
+      // Navigate to OAuth URL
+      window.location.assign(authUrl);
     } catch (error) {
       console.error('zkLogin error:', error);
       setIsLoading(false);

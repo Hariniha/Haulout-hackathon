@@ -35,7 +35,7 @@ export function ExampleMintComponent() {
       );
 
       // Execute the transaction
-      const result: any = await executeTransaction(tx);
+      const result = await executeTransaction(tx) as { digest?: string };
       
       console.log('Transaction result:', result);
       setTxDigest(result.digest || 'Transaction successful');
@@ -60,7 +60,7 @@ export function ExampleMintComponent() {
             Please connect your Sui wallet to mint Patent NFTs
           </p>
           <p className="text-sm text-[#525252]">
-            Click "Connect Wallet" in the navigation bar
+            Click &quot;Connect Wallet&quot; in the navigation bar
           </p>
         </div>
       </div>
